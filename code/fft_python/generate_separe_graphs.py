@@ -7,19 +7,12 @@ sampling_frequency = 868.85
 window_time = 20
 samples_ox = np.array([77, 80, 78, 82, 80, 79, 81, 82, 78])
 
-lines = 0
-with open('josiane_finger_tapping.csv') as reader:
-   for line in reader:
-      lines = lines + 1
+csv_lines = open('josiane_finger_tapping.csv').readlines()
+number_samples = len(csv_lines)
+samples = np.zeros(number_samples)
 
-number_samples = lines
-samples = np.zeros(lines)
-
-lines = 0
-with open('josiane_finger_tapping.csv') as reader:
-   for line in reader:
-      samples[lines] = np.float64(line)
-      lines = lines + 1
+for index, line in enumerate(csv_lines):
+   samples[index] = np.float64(line)
 
 sampling_time = 1/sampling_frequency
 aquisition_time = number_samples*sampling_time
@@ -33,11 +26,9 @@ bpm = np.zeros(number_windows)
 
 time = np.linspace(0.0, window_time, number_samples_per_window, endpoint=False)
 frequency = np.linspace(0.0, sampling_frequency//2, number_samples_per_window//2, endpoint=False)
-print(number_samples_per_window)
 
 for k in range(number_windows):
-   signal_samples_windows[k] = samples[number_samples_per_window*k:number_samples_per_window*(k+1)]
-   print(signal_samples_windows[k].size)
+   signal_samples_windows[k] = samples[(number_samples_per_window * k):(number_samples_per_window * (k + 1))]
    s = signal_samples_windows[k]
    s -= s.mean()
    s = fft(s) 

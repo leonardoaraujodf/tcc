@@ -1,43 +1,18 @@
-import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from scipy.fft import fft
+from handle_samples import *
 
 sampling_frequency = 868.85
-window_time = 20
+time_for_each_window_s = 20
 samples_ox = np.array([77, 80, 78, 82, 80, 79, 81, 82, 78])
 
-csv_lines = open('josiane_finger_tapping.csv').readlines()
-number_samples = len(csv_lines)
-samples = np.zeros(number_samples)
+# Create a function to open the file, extract the samples and return them
 
-for index, line in enumerate(csv_lines):
-   samples[index] = np.float64(line)
+number_samples, samples = get_samples_from_file('josiane_finger_tapping.csv')
+number_windows, number_samples_per_window, windows_frequency, frequency, bpm = \
+  convert_samples_to_processed_windows(samples, number_samples, sampling_frequency, time_for_each_window_s) 
 
-sampling_time = 1/sampling_frequency
-aquisition_time = number_samples*sampling_time
-
-number_samples_per_window = int(window_time * sampling_frequency)
-number_windows = number_samples//number_samples_per_window
-
-signal_samples_windows = np.zeros((number_windows, number_samples_per_window))
-signal_frequency_windows = []
-bpm = np.zeros(number_windows)
-
-time = np.linspace(0.0, window_time, number_samples_per_window, endpoint=False)
-frequency = np.linspace(0.0, sampling_frequency//2, number_samples_per_window//2, endpoint=False)
-
-for k in range(number_windows):
-   signal_samples_windows[k] = samples[(number_samples_per_window * k):(number_samples_per_window * (k + 1))]
-   s = signal_samples_windows[k]
-   s -= s.mean()
-   s = fft(s) 
-   if k == 0:
-      signal_frequency_windows = np.zeros((number_windows, s.size//2))
-   signal_frequency_windows[k] = np.abs(s[:s.size//2])
-   bpm[k] = frequency[signal_frequency_windows[k].argmax()] * 60
-
-bpm_time = window_time*np.linspace(0, number_windows-1, number_windows)
+bpm_time = time_for_each_window_s*np.linspace(0, number_windows-1, number_windows)
 
 # This piece of code generates 9 graphs in the same
 # figure.
@@ -46,7 +21,7 @@ bpm_time = window_time*np.linspace(0, number_windows-1, number_windows)
 # x = 0
 # y = 0
 # for k in range(number_windows):
-#    axs[x,y].plot(frequency, 2.0/(number_samples_per_window*10**3) * signal_frequency_windows[k], label='Janela '+ str(k+1) + ' - ' + str(int(bpm[k])) + ' bpm')
+#    axs[x,y].plot(frequency, 2.0/(number_samples_per_window*10**3) * windows_frequency[k], label='Janela '+ str(k+1) + ' - ' + str(int(bpm[k])) + ' bpm')
 #    axs[x,y].set_xlim([0, 5])
 #    axs[x,y].set_xlabel('f (Hz)')
 #    axs[x,y].set_ylabel('Amplitude')
@@ -60,7 +35,7 @@ bpm_time = window_time*np.linspace(0, number_windows-1, number_windows)
 fig, axs = plt.subplots(2,1)
 print(axs.size)
 for k in range(number_windows):
-   axs[0].plot(frequency, 2.0/number_samples_per_window * signal_frequency_windows[k], label='Window '+ str(k+1) + ' - ' + str(int(bpm[k])) + ' bpm')
+   axs[0].plot(frequency, 2.0/number_samples_per_window * windows_frequency[k], label='Window '+ str(k+1) + ' - ' + str(int(bpm[k])) + ' bpm')
 
 axs[1].plot(bpm_time, bpm, label='PPG')
 axs[1].plot(bpm_time, samples_ox, label='Oximeter')

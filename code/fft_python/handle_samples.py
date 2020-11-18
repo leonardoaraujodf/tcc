@@ -25,6 +25,15 @@ def get_samples_from_file(filename):
    return number_samples, samples
 
 def get_next_power2(number):
+   """
+   Given a number, this function calculates the next power of 2.
+
+   Parameters:
+      number: the number to calculate the next power of 2.
+
+   Returns:
+      next_power: the next power of 2.
+   """
    i = number
    next_power = 1
    while( i >= 1 ):
@@ -33,11 +42,24 @@ def get_next_power2(number):
 
    return next_power
 
-def compute_windowing(samples):
-   hamming = get_window('hamming', samples)
+def compute_windowing(window_name, samples):
+   """
+   Generates a window based in the window name and the number of samples given.
+
+   Parameters:
+      window_name: The window one wants to generate. This could be hamming, blackman,
+      hanning, etc.
+      samples: Number of samples used to generate the window.
+
+   Returns:
+      windowing: The window generated.
+      n: the next power of 2 from samples to compute the fft.
+   """
+
+   windowing = get_window(window_name, samples)
    n = get_next_power2(samples)
 
-   return hamming, n
+   return windowing, n
    
 
 def convert_samples_to_processed_windows(samples, number_samples, sampling_frequency, time_for_each_window_s):
@@ -76,11 +98,9 @@ def convert_samples_to_processed_windows(samples, number_samples, sampling_frequ
 # bpm - beats per minute
    bpm = np.zeros(number_windows)
 
+   windowing, fft_number_samples = compute_windowing('hamming', number_samples_per_window)
    time = np.linspace(0.0, time_for_each_window_s, number_samples_per_window, endpoint = False)
-   frequency = np.linspace(0.0, sampling_frequency // 2, number_samples_per_window // 2, endpoint = False)
-
-   hamming, fft_number_samples = compute_windowing('hamming', number_samples_per_window)
-   print(number_samples_per_window)
+   frequency = np.linspace(0.0, sampling_frequency // 2, fft_number_samples // 2, endpoint = False)
 
    for i in range(number_windows):
       windows_time[i] = samples[(number_samples_per_window * i):(number_samples_per_window * (i + 1))]
@@ -88,7 +108,7 @@ def convert_samples_to_processed_windows(samples, number_samples, sampling_frequ
 
 # Remove the mean to improve the frequency response
       actual_window_time -= actual_window_time.mean()
-      actual_window_freq = fft(actual_window_time)
+      actual_window_freq = fft(actual_window_time * windowing, fft_number_samples)
       actual_window_freq_size = actual_window_freq.size // 2
       if i == 0:
          windows_frequency = np.zeros((number_windows, actual_window_freq_size))

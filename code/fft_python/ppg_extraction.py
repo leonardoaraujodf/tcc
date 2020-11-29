@@ -3,8 +3,12 @@
 # --- Imported libraries ---------------------------------------------------{{{
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.signal import get_window
+from scipy.fft import fft, fftshift
 from copy import deepcopy
 # ---}}}
+
+WINDOW_TIME_S = 5
 
 def get_ppg_info():
    ppg_info = []
@@ -71,21 +75,22 @@ def get_ppg_info():
    return ppg_info
 
 def ppg_extract_data():
-   ppg_info = get_ppg_info()
-   ppg_data = []
-   for i, dic in enumerate(ppg_info):
-      ppg_temp = PpgData(dic['filename'], dic['rest_beginning_seconds'], \
-                    dic['rest_end_seconds'], dic['finger_beginning_seconds'], \
-                    dic['finger_end_seconds'])
-      ppg_temp.ppg_extraction()
-      if ppg_data == []:
-         ppg_data = ppg_temp
+   info = get_ppg_info()
+   ppg = []
+   for i, ppg_data in enumerate(info):
+      temp = PPG(ppg_data['filename'], ppg_data['rest_beginning_seconds'], \
+                    ppg_data['rest_end_seconds'], ppg_data['finger_beginning_seconds'], \
+                    ppg_data['finger_end_seconds'])
+      temp.extract()
+      if ppg == []:
+         ppg = temp
       else:
-         ppg_data.ppg_vstack(ppg_temp)
+         ppg.vstack(temp)
    
-   ppg_data.generate_time_axis()
+   ppg.generate_time_axis()
+   ppg.gen_windows()
 
-   return ppg_data
+   return ppg
 
 def plot_ppg_data_in_time(ppg_data):
    import matplotlib
@@ -105,7 +110,7 @@ def plot_ppg_data_in_time(ppg_data):
    plt.title('Channel N. 0 (rest)')
    plt.show()
     
-class PpgData:
+class PPG:
    def __init__(self, filename, rest_beginning_seconds, rest_end_seconds, finger_beginning_seconds, \
                 finger_end_seconds, n_detectors = 5, n_sources = 2, total_fs = 4500, ad_converter_voltage = 3.3, \
                 ad_converter_resolution = 2**23):
@@ -127,8 +132,11 @@ class PpgData:
       self.t_total = []
       self.n_channels = []
       self.fs = []
+      self.windows_rest = []
+      self.windows_finger = []
+      self.f = []
 
-   def ppg_extraction(self):
+   def extract(self):
       self.n_channels = self.n_sources * self.n_detectors
       with open(self.filename, 'r') as fp:
          hexvals = fp.readlines()
@@ -141,32 +149,97 @@ class PpgData:
       if m != 0:
          raw_signal = raw_signal[:-m]
 
-# Only generate a time array which has the same lenght of the signal.
-# When we finish processing all data, then use generate_time_axis to really generate the time array.
+      # Only generate a time array which has the same lenght of the signal.
+      # When we finish processing all data, then use generate_time_axis to really generate the time array.
       self.t_total = np.arange(len(raw_signal))
 
       N = int(len(raw_signal) / self.n_channels)
       self.x = raw_signal.reshape(N, self.n_channels)
       self.fs = self.total_fs / self.n_channels
-      self.x_rest = deepcopy(self.x[int(self.rest_beginning_seconds * self.fs) : int(self.rest_end_seconds * self.fs), :])
-      self.x_finger = deepcopy(self.x[int(self.finger_beginning_seconds * self.fs) : int(self.finger_end_seconds * self.fs), :])
+      self.x_rest = deepcopy(self.x[int(self.rest_beginning_seconds * self.fs) : \
+                                       int(self.rest_end_seconds * self.fs), :])
+      self.x_finger = deepcopy(self.x[int(self.finger_beginning_seconds * self.fs) : \
+                                       int(self.finger_end_seconds * self.fs), :])
 
    def generate_time_axis(self):
       self.t_total = (1/self.total_fs) * self.t_total
-      self.t_rest = self.n_channels * deepcopy(self.t_total[int(self.rest_beginning_seconds * self.fs) : int(self.rest_end_seconds * self.fs)])
+      self.t_rest = self.n_channels * deepcopy(self.t_total[int(self.rest_beginning_seconds * self.fs) : \
+                                                int(self.rest_end_seconds * self.fs)])
       self.t_finger = self.n_channels * deepcopy(self.t_total[int(self.finger_beginning_seconds * self.fs) : \
-                                 int(self.finger_end_seconds * self.fs)])
+                                                   int(self.finger_end_seconds * self.fs)])
 
    def adjust_time_samples(self, ppg_data):
       self.t_total = np.hstack((self.t_total, ppg_data.t_total))
       self.rest_end_seconds += ppg_data.rest_end_seconds - ppg_data.rest_beginning_seconds
       self.finger_end_seconds += ppg_data.finger_end_seconds - ppg_data.finger_beginning_seconds
 
-   def ppg_vstack(self, ppg_data):
+   def vstack(self, ppg_data):
       self.x_rest = np.vstack((self.x_rest, ppg_data.x_rest))
       self.x_finger = np.vstack((self.x_finger, ppg_data.x_finger))
       self.x = np.vstack((self.x, ppg_data.x))
       self.adjust_time_samples(ppg_data)
+
+   def __get_next_power2(self, number):
+      i = number
+      next_power = 1
+      while(i >= 1):
+         next_power *= 2
+         i //= 2
+
+      return next_power
+
+   def __gen_windowing(self, window_name, samples):
+      windowing = get_window(window_name, samples)
+      n = self.__get_next_power2(samples)
+      return windowing, n
+
+   def __gen_freq_windows(self, x, t_each_win):
+      n_samples = x.size
+      ts = 1 / self.fs
+      n_samples_per_window = int(t_each_win * self.fs)
+      n_windows = n_samples // n_samples_per_window
+      windows_in_time = np.zeros((n_windows, n_samples_per_window))
+      windows_in_freq = []
+      print(windows_in_freq)
+      windowing, fft_n_samples = self.__gen_windowing('hamming', n_samples_per_window)
+      t = np.linspace(0.0, t_each_win, n_samples_per_window, endpoint = False)
+      f = np.linspace(0.0, self.fs // 2, fft_n_samples // 2, endpoint = False)
+
+      for i in range(n_windows):
+         windows_in_time[i] = x[(n_samples_per_window * i):(n_samples_per_window * (i + 1))]
+         # The variable 'w' refers to the actual window, which has the samples in time.
+         # Wf then has the frequency response
+         w = windows_in_time[i]
+         w -= w.mean()
+         Wf = fft(w * windowing, fft_n_samples)
+         if i == 0:
+            windows_in_freq = np.zeros((n_windows, Wf.size // 2))
+         # Just uses half of the frequency response, because the other side has the same info,
+         # but mirrored. Also, we are handling with complex numbers (crap! Wf is an array of complex
+         # numbers) so just get the magnitude for us.
+         Wfmag = np.abs(Wf[:(Wf.size // 2)])
+         windows_in_freq[i] = Wfmag
+
+      return windows_in_freq, f
+
+   def __split(self, x, t_each_win):
+      (_, col) = x.shape
+      windows = []
+      f = np.array([])
+      for i in range(col):
+         w, f = self.__gen_freq_windows(x[:, i], t_each_win)
+         if i == 0:
+            windows = w
+         else:
+            print(w.shape)
+            print(windows.shape)
+            windows = np.concatenate((w, windows))
+      
+      return windows, f
+      
+   def gen_windows(self, t_each_win = WINDOW_TIME_S):
+      self.windows_rest, _ = self.__split(self.x_rest, t_each_win)
+      self.windows_finger, self.f = self.__split(self.x_finger, t_each_win)
 
 '''
 # --- ppg_extraction -------------------------------------------------------{{{

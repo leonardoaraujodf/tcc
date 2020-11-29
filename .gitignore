@@ -1,0 +1,9 @@
+# ignore all .swp (vim swap files)
+*.swp
+
+# ignore all __pycache__
+*__pycache__*
+
+# In the data folder
+# - Ignore all .txt
+data/*.txt

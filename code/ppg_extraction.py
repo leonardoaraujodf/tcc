@@ -2,6 +2,7 @@
 
 # --- Imported libraries ---------------------------------------------------{{{
 import os
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import get_window
@@ -91,6 +92,7 @@ def ppg_extract_data():
    
    ppg.generate_time_axis()
    ppg.gen_windows()
+   ppg.plot_windows()
 
    return ppg
 
@@ -223,11 +225,11 @@ class PPG:
 
       return windows_in_freq, f
 
-   def __split(self, x, t_each_win):
+   def __split(self, x, t_each_win, n_channels=1):
       (_, col) = x.shape
       windows = []
       f = np.array([])
-      for i in range(col):
+      for i in range(n_channels):
          w, f = self.__gen_freq_windows(x[:, i], t_each_win)
          if i == 0:
             windows = w
@@ -239,6 +241,26 @@ class PPG:
    def gen_windows(self, t_each_win = WINDOW_TIME_S):
       self.windows_rest, _ = self.__split(self.x_rest, t_each_win)
       self.windows_finger, self.f = self.__split(self.x_finger, t_each_win)
+   
+   def plot_windows(self):
+     fig, axs = plt.subplots(2, 1)
+     n_windows, N = self.windows_rest.shape
+     for i in range(n_windows):
+        axs[0].plot(self.f, 2.0/N * self.windows_rest[i], label='Window ' + str(i+1))
+        axs[1].plot(self.f, 2.0/N * self.windows_finger[i], label='Window ' + str(i+1))
+
+     axs[0].set_xlim([0, 5])
+     axs[1].set_xlim([0, 5])
+
+     axs[0].set_xlabel('f (Hz)')
+     axs[1].set_xlabel('f (Hz)')
+     axs[0].set_ylabel('Amplitude')
+     axs[1].set_ylabel('Amplitude')
+     # axs[0].legend()
+     # axs[1].legend()
+     axs[0].set_title('PPG frequency response', loc='left')
+     axs[0].set_title('PPG frequency response', loc='left')
+     plt.show()
 
 '''
 # --- ppg_extraction -------------------------------------------------------{{{

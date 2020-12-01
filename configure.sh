@@ -2,7 +2,7 @@
 
 if [ "$(printenv TCC_DIR)" = "" ]
 then
-   echo "export TCC_DIR=${PWD}" >> ~/.bashrc 
+   echo "export TCC_DIR=\"${PWD}\"" >> ~/.bashrc 
    source ~/.bashrc
 fi
 

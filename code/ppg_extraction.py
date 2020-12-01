@@ -91,8 +91,10 @@ def ppg_extract_data():
          ppg.vstack(temp)
    
    ppg.generate_time_axis()
-   ppg.gen_windows()
-   ppg.plot_windows()
+   ppg.gen_windows_in_time()
+   ppg.plot_one_window_in_time()
+   ppg.gen_windows_in_frequency()
+   ppg.plot_windows_in_freq()
 
    return ppg
 
@@ -136,9 +138,12 @@ class PPG:
       self.t_total = []
       self.n_channels = []
       self.fs = []
-      self.windows_rest = []
-      self.windows_finger = []
+      self.windows_rest_time = []
+      self.windows_finger_time = []
+      self.windows_rest_freq = []
+      self.windows_finger_freq = []
       self.f = []
+      self.t = []
 
    def extract(self):
       self.n_channels = self.n_sources * self.n_detectors
@@ -198,56 +203,78 @@ class PPG:
       return windowing, n
 
    def __gen_freq_windows(self, x, t_each_win):
-      n_samples = x.size
-      ts = 1 / self.fs
-      n_samples_per_window = int(t_each_win * self.fs)
-      n_windows = n_samples // n_samples_per_window
-      windows_in_time = np.zeros((n_windows, n_samples_per_window))
       windows_in_freq = []
+      windows_in_time, t = self.__gen_time_windows(x, t_each_win)
+      n_windows, n_samples_per_window = windows_in_time.shape
       windowing, fft_n_samples = self.__gen_windowing('hamming', n_samples_per_window)
-      t = np.linspace(0.0, t_each_win, n_samples_per_window, endpoint = False)
       f = np.linspace(0.0, self.fs // 2, fft_n_samples // 2, endpoint = False)
 
       for i in range(n_windows):
-         windows_in_time[i] = x[(n_samples_per_window * i):(n_samples_per_window * (i + 1))]
-         # The variable 'w' refers to the actual window, which has the samples in time.
-         # Wf then has the frequency response
          w = windows_in_time[i]
          w -= w.mean()
          Wf = fft(w * windowing, fft_n_samples)
          if i == 0:
             windows_in_freq = np.zeros((n_windows, Wf.size // 2))
-         # Just uses half of the frequency response, because the other side has the same info,
-         # but mirrored. Also, we are handling with complex numbers (crap! Wf is an array of complex
-         # numbers) so just get the magnitude for us.
+         # Just uses half of the frequency response, because the other side has the same info, but mirrored. Also, remember that we handling with complex numbers (Wf is an array of complex numbers...) so just get the magnitude of it for us.
          Wfmag = np.abs(Wf[:(Wf.size // 2)])
          windows_in_freq[i] = Wfmag
 
       return windows_in_freq, f
 
-   def __split(self, x, t_each_win, n_channels=1):
+   def __gen_time_windows(self, x, t_each_win):
+      n_samples = x.size
+      ts = 1 / self.fs
+      n_samples_per_window = int(t_each_win * self.fs)
+      n_windows = n_samples // n_samples_per_window
+      windows_in_time = np.zeros((n_windows, n_samples_per_window))
+      t = np.linspace(0.0, t_each_win, n_samples_per_window, endpoint = False)
+
+      for i in range(n_windows):
+         windows_in_time[i] = x[(n_samples_per_window * i):(n_samples_per_window * (i + 1))]
+
+      return windows_in_time, t
+
+   def __split(self, x, t_each_win, window_type, n_channels = 1):
       (_, col) = x.shape
       windows = []
-      f = np.array([])
+      dimension = np.array([])
+      if window_type == 'frequency':
+         window_operation = self.__gen_freq_windows
+      elif window_type == 'time':
+         window_operation = self.__gen_time_windows
+
       for i in range(n_channels):
-         w, f = self.__gen_freq_windows(x[:, i], t_each_win)
+         w, dimension = window_operation(x[:, i], t_each_win)
          if i == 0:
             windows = w
          else:
             windows = np.concatenate((w, windows))
       
-      return windows, f
+      return windows, dimension
       
-   def gen_windows(self, t_each_win = WINDOW_TIME_S):
-      self.windows_rest, _ = self.__split(self.x_rest, t_each_win)
-      self.windows_finger, self.f = self.__split(self.x_finger, t_each_win)
+   def gen_windows_in_frequency(self, t_each_win = WINDOW_TIME_S):
+      self.windows_rest_freq, _ = self.__split(self.x_rest, t_each_win, window_type = 'frequency')
+      self.windows_finger_freq, self.f = self.__split(self.x_finger, t_each_win, window_type = 'frequency')
+
+   def gen_windows_in_time(self, t_each_win = WINDOW_TIME_S):
+      self.windows_rest_time, _ = self.__split(self.x_rest, t_each_win, window_type = 'time')
+      self.windows_finger_time, self.t = self.__split(self.x_finger, t_each_win, window_type = 'time')
    
-   def plot_windows(self):
+   def plot_one_window_in_time(self):
+      print(self.t.shape)
+      print(self.windows_rest_time[0].shape)
+      plt.plot(self.t, self.windows_rest_time[0], label = 'Window 1')
+      plt.xlabel('t (s)')
+      plt.ylabel('$x_c(t)$ (volts)')
+      plt.title('First window in time')
+      plt.show()
+   
+   def plot_windows_in_freq(self):
      fig, axs = plt.subplots(2, 1)
-     n_windows, N = self.windows_rest.shape
+     n_windows, N = self.windows_rest_freq.shape
      for i in range(n_windows):
-        axs[0].plot(self.f, 2.0/N * self.windows_rest[i], label='Window ' + str(i+1))
-        axs[1].plot(self.f, 2.0/N * self.windows_finger[i], label='Window ' + str(i+1))
+        axs[0].plot(self.f, 2.0/N * self.windows_rest_freq[i], label = 'Window ' + str(i+1))
+        axs[1].plot(self.f, 2.0/N * self.windows_finger_freq[i], label = 'Window ' + str(i+1))
 
      axs[0].set_xlim([0, 5])
      axs[1].set_xlim([0, 5])
